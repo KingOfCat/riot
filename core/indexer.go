@@ -684,6 +684,89 @@ func (indexer *Indexer) LogicLookup(
 	return
 }
 
+func processLogicRes(mustTable []*KeywordIndices, shouldTable []*KeywordIndices, notInTable []*KeywordIndices) (docs []types.IndexedDoc, numDocs int) {
+
+	//处理mustTable
+	minlen:=-1
+	minindex:=-1
+	mustres:=[]string{}
+	for i,ks:=range mustTable{
+		if len(ks.docIds) < minlen {
+			minlen=len(ks.docIds)
+			minindex=i
+		}
+	}
+
+	m:=make(map[string]int,minlen)
+	for _,v:=range mustTable[minlen].docIds{
+		m[v]=1
+	}
+
+	for i,ks:=range mustTable{
+		if i != minindex {
+			//先去重复
+			ss:=removeDuplicate(ks.docIds)
+			for _,s:=range ss{
+				_,ok:=m[s]
+				if ok {
+					m[s]++
+				}
+			}
+			
+		}
+	}
+
+	for k,v:=range m{
+		if v == len(mustTable) {
+			mustres=append(mustres,k)
+		}
+	}
+
+	//处理shouldTable
+
+	shouldres:=make(map[string]int)
+	for _,ks:=range shouldTable{
+		for _,docID:=range ks.docIds{
+			shouldres[docID]++
+		}
+	}
+
+	//处理notInShould
+	notInres:=make(map[string]int)
+	for _,ks:=range notInTable{
+		for _,docID:=range ks.docIds{
+			notInres[docID]++
+		}
+	}
+
+	//先处理must 和should 和notin的联合过滤结果
+	res:=[]types.IndexedDoc{}
+	for _,s:=range mustres{
+		_,okshould:=shouldres[s]
+		_,oknotIn:=notInres[s]
+		if okshould&&!oknotIn {
+			res=append(res,types.IndexedDoc{
+				DocId:s,
+			})
+		}
+	}
+	return res,len(res)
+}
+
+func removeDuplicate(input []string) []string {
+
+	i:=0
+	j:=i+1
+	for ; j<len(input);j++  {
+		if input[i]!=input[j] {
+			i++
+			input[i]=input[j]
+		}
+	}
+	return input[:i+1]
+}
+
+
 // searchIndex 二分法查找 indices 中某文档的索引项
 // 第一个返回参数为找到的位置或需要插入的位置
 // 第二个返回参数标明是否找到
