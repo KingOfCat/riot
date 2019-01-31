@@ -557,24 +557,141 @@ func (indexer *Indexer) internalLookup(
 	return
 }
 
+//// LogicLookup logic Lookup
+//func (indexer *Indexer) LogicLookup(
+//	docIds map[string]bool, countDocsOnly bool, logicExpr []string,
+//	logic types.Logic) (docs []types.IndexedDoc, numDocs int) {
+//
+//	// // 有效性检查, 不允许只出现逻辑非检索, 也不允许与或非都不存在
+//	// if Logic.Must == true && Logic.Should == true && Logic.NotIn == true {
+//	// 	return
+//	// }
+//
+//	// mustTable 中的搜索键检查
+//	// 如果存在与搜索键, 则要求所有的与搜索键都有对应的反向表
+//	mustTable := make([]*KeywordIndices, 0)
+//
+//	if len(logic.Expr.Must) > 0 {
+//		logicExpr = logic.Expr.Must
+//	}
+//	if logic.Must == true || len(logic.Expr.Must) > 0 {
+//		for _, keyword := range logicExpr {
+//			indices, found := indexer.tableLock.table[keyword]
+//			if !found {
+//				return
+//			}
+//
+//			mustTable = append(mustTable, indices)
+//		}
+//	}
+//
+//	// 逻辑或搜索键检查
+//	// 1. 如果存在逻辑或搜索键, 则至少有一个存在反向表
+//	// 2. 逻辑或和逻辑与之间是与关系
+//	shouldTable := make([]*KeywordIndices, 0)
+//
+//	if len(logic.Expr.Should) > 0 {
+//		logicExpr = logic.Expr.Should
+//	}
+//
+//	if logic.Should == true || len(logic.Expr.Should) > 0 {
+//		for _, keyword := range logicExpr {
+//			indices, found := indexer.tableLock.table[keyword]
+//			if found {
+//				shouldTable = append(shouldTable, indices)
+//			}
+//		}
+//		if len(shouldTable) == 0 {
+//			// 如果存在逻辑或搜索键， 但是对应的反向表全部为空， 则返回
+//			return
+//		}
+//	}
+//
+//	// 逻辑非中的搜索键检查
+//	// 可以不存在逻辑非搜索（NotInTable为空), 允许逻辑非搜索键对应的反向表为空
+//	notInTable := make([]*KeywordIndices, 0)
+//
+//	if len(logic.Expr.NotIn) > 0 {
+//		logicExpr = logic.Expr.NotIn
+//	}
+//	if logic.NotIn == true || len(logic.Expr.NotIn) > 0 {
+//		for _, keyword := range logicExpr {
+//			indices, found := indexer.tableLock.table[keyword]
+//			if found {
+//				notInTable = append(notInTable, indices)
+//			}
+//		}
+//	}
+//
+//	// 开始检索
+//	numDocs = 0
+//	if logic.Must == true || len(logic.Expr.Must) > 0 {
+//		// 如果存在逻辑与检索
+//		for idx := indexer.getIndexLen(mustTable[0]) - 1; idx >= 0; idx-- {
+//			baseDocId := indexer.getDocId(mustTable[0], idx)
+//			if docIds != nil {
+//				_, found := docIds[baseDocId]
+//				if !found {
+//					continue
+//				}
+//			}
+//
+//			mustFound := indexer.findInMustTable(mustTable[1:], baseDocId)
+//			shouldFound := indexer.findInShouldTable(shouldTable, baseDocId)
+//			notInFound := indexer.findInNotInTable(notInTable, baseDocId)
+//
+//			if mustFound && shouldFound && !notInFound {
+//				indexedDoc := types.IndexedDoc{}
+//				indexedDoc.DocId = baseDocId
+//				if !countDocsOnly {
+//					docs = append(docs, indexedDoc)
+//				}
+//				numDocs++
+//			}
+//		}
+//
+//		return
+//	}
+//
+//	// 不存在逻辑与检索, 则必须存在逻辑或检索
+//	// 这时进行求并集操作
+//	if logic.Should == true || len(logic.Expr.Should) > 0 {
+//		docs, numDocs = indexer.unionTable(shouldTable, notInTable, countDocsOnly)
+//	} else {
+//		uintDocIds := make([]string, 0)
+//		// 当前直接返回 Not 逻辑数据
+//		for i := 0; i < len(notInTable); i++ {
+//			for _, docid := range notInTable[i].docIds {
+//				if indexer.findInNotInTable(notInTable, docid) {
+//					uintDocIds = append(uintDocIds, docid)
+//				}
+//			}
+//		}
+//
+//		// StableDesc(uintDocIds)
+//
+//		numDocs = 0
+//		for _, doc := range uintDocIds {
+//			indexedDoc := types.IndexedDoc{}
+//			indexedDoc.DocId = doc
+//			if !countDocsOnly {
+//				docs = append(docs, indexedDoc)
+//			}
+//			numDocs++
+//		}
+//	}
+//
+//	return
+//}
+
+
 // LogicLookup logic Lookup
 func (indexer *Indexer) LogicLookup(
 	docIds map[string]bool, countDocsOnly bool, logicExpr []string,
 	logic types.Logic) (docs []types.IndexedDoc, numDocs int) {
 
-	// // 有效性检查, 不允许只出现逻辑非检索, 也不允许与或非都不存在
-	// if Logic.Must == true && Logic.Should == true && Logic.NotIn == true {
-	// 	return
-	// }
-
-	// mustTable 中的搜索键检查
-	// 如果存在与搜索键, 则要求所有的与搜索键都有对应的反向表
-	mustTable := make([]*KeywordIndices, 0)
-
-	if len(logic.Expr.Must) > 0 {
-		logicExpr = logic.Expr.Must
-	}
-	if logic.Must == true || len(logic.Expr.Must) > 0 {
+	if logic.Must&&!logic.Should{
+		mustTable := make([]*KeywordIndices, 0,len(logicExpr))
 		for _, keyword := range logicExpr {
 			indices, found := indexer.tableLock.table[keyword]
 			if !found {
@@ -583,117 +700,250 @@ func (indexer *Indexer) LogicLookup(
 
 			mustTable = append(mustTable, indices)
 		}
+		//only must
+		if len(logic.Expr.Should) == 0 && len(logic.Expr.NotIn) == 0 {
+			return findLogicMust(mustTable)
+		}
+
+		//must and should
+		if len(logic.Expr.Should )>0 &&len(logic.Expr.NotIn)==0{
+			shouldTable:=make([]*KeywordIndices,0,len(logic.Expr.Should))
+			for _, keyword := range logic.Expr.Should {
+				indices, found := indexer.tableLock.table[keyword]
+				if found {
+					shouldTable = append(shouldTable, indices)
+				}
+			}
+
+			return  findLogicMustShould(mustTable,shouldTable)
+		}
+		//must and not
+		if len(logic.Expr.Should) == 0 && len(logic.Expr.NotIn) > 0 {
+			notInTable := make([]*KeywordIndices, 0,len(logic.Expr.NotIn))
+			for _, keyword := range logic.Expr.NotIn {
+				indices, found := indexer.tableLock.table[keyword]
+				if found {
+					notInTable = append(notInTable, indices)
+				}
+			}
+			return findLogicMustNot(mustTable,notInTable)
+		}
+
+		//must and should and not
+		if len(logic.Expr.Should) > 0 && len(logic.Expr.NotIn) > 0 {
+			shouldTable:=make([]*KeywordIndices,0,len(logic.Expr.Should))
+			for _, keyword := range logic.Expr.Should {
+				indices, found := indexer.tableLock.table[keyword]
+				if found {
+					shouldTable = append(shouldTable, indices)
+				}
+			}
+			notInTable := make([]*KeywordIndices, 0,len(logic.Expr.NotIn))
+			for _, keyword := range logic.Expr.NotIn {
+				indices, found := indexer.tableLock.table[keyword]
+				if found {
+					notInTable = append(notInTable, indices)
+				}
+			}
+			return findLogicMustShouldNot(mustTable,shouldTable,notInTable)
+
+		}
+
 	}
 
-	// 逻辑或搜索键检查
-	// 1. 如果存在逻辑或搜索键, 则至少有一个存在反向表
-	// 2. 逻辑或和逻辑与之间是与关系
-	shouldTable := make([]*KeywordIndices, 0)
-
-	if len(logic.Expr.Should) > 0 {
-		logicExpr = logic.Expr.Should
-	}
-
-	if logic.Should == true || len(logic.Expr.Should) > 0 {
-		for _, keyword := range logicExpr {
+	if logic.Should &&!logic.Must{
+		shouldTable:=make([]*KeywordIndices,0,len(logic.Expr.Should))
+		for _, keyword := range logic.Expr.Should {
 			indices, found := indexer.tableLock.table[keyword]
 			if found {
 				shouldTable = append(shouldTable, indices)
 			}
 		}
-		if len(shouldTable) == 0 {
-			// 如果存在逻辑或搜索键， 但是对应的反向表全部为空， 则返回
-			return
+		//only should
+		if len(logic.Expr.Must) == 0 && len(logic.Expr.NotIn) == 0 {
+			return findLogicShould(shouldTable)
 		}
-	}
-
-	// 逻辑非中的搜索键检查
-	// 可以不存在逻辑非搜索（NotInTable为空), 允许逻辑非搜索键对应的反向表为空
-	notInTable := make([]*KeywordIndices, 0)
-
-	if len(logic.Expr.NotIn) > 0 {
-		logicExpr = logic.Expr.NotIn
-	}
-	if logic.NotIn == true || len(logic.Expr.NotIn) > 0 {
-		for _, keyword := range logicExpr {
-			indices, found := indexer.tableLock.table[keyword]
-			if found {
-				notInTable = append(notInTable, indices)
-			}
-		}
-	}
-
-	// 开始检索
-	numDocs = 0
-	if logic.Must == true || len(logic.Expr.Must) > 0 {
-		// 如果存在逻辑与检索
-		for idx := indexer.getIndexLen(mustTable[0]) - 1; idx >= 0; idx-- {
-			baseDocId := indexer.getDocId(mustTable[0], idx)
-			if docIds != nil {
-				_, found := docIds[baseDocId]
+		//should and must
+		if len(logic.Expr.Must) > 0 && len(logic.Expr.NotIn) == 0 {
+			mustTable := make([]*KeywordIndices, 0,len(logicExpr))
+			for _, keyword := range logicExpr {
+				indices, found := indexer.tableLock.table[keyword]
 				if !found {
-					continue
+					return
+				}
+				mustTable = append(mustTable, indices)
+			}
+			return findLogicMustShould(mustTable,shouldTable)
+		}
+		//should and not
+		if len(logic.Expr.Must) == 0&&len(logic.Expr.NotIn)>0 {
+			notInTable := make([]*KeywordIndices, 0,len(logic.Expr.NotIn))
+			for _, keyword := range logic.Expr.NotIn {
+				indices, found := indexer.tableLock.table[keyword]
+				if found {
+					notInTable = append(notInTable, indices)
 				}
 			}
-
-			mustFound := indexer.findInMustTable(mustTable[1:], baseDocId)
-			shouldFound := indexer.findInShouldTable(shouldTable, baseDocId)
-			notInFound := indexer.findInNotInTable(notInTable, baseDocId)
-
-			if mustFound && shouldFound && !notInFound {
-				indexedDoc := types.IndexedDoc{}
-				indexedDoc.DocId = baseDocId
-				if !countDocsOnly {
-					docs = append(docs, indexedDoc)
-				}
-				numDocs++
-			}
+			return findLogicShouldNot(shouldTable,notInTable)
 		}
 
-		return
+		//should and must and not
+		if len(logic.Expr.Must) > 0&&len(logic.Expr.NotIn)>0 {
+			mustTable := make([]*KeywordIndices, 0,len(logicExpr))
+			for _, keyword := range logicExpr {
+				indices, found := indexer.tableLock.table[keyword]
+				if !found {
+					return
+				}
+				mustTable = append(mustTable, indices)
+			}
+
+			notInTable := make([]*KeywordIndices, 0,len(logic.Expr.NotIn))
+			for _, keyword := range logic.Expr.NotIn {
+				indices, found := indexer.tableLock.table[keyword]
+				if found {
+					notInTable = append(notInTable, indices)
+				}
+			}
+
+			return findLogicMustShouldNot(mustTable,shouldTable,notInTable)
+		}
+
 	}
-
-	// 不存在逻辑与检索, 则必须存在逻辑或检索
-	// 这时进行求并集操作
-	if logic.Should == true || len(logic.Expr.Should) > 0 {
-		docs, numDocs = indexer.unionTable(shouldTable, notInTable, countDocsOnly)
-	} else {
-		uintDocIds := make([]string, 0)
-		// 当前直接返回 Not 逻辑数据
-		for i := 0; i < len(notInTable); i++ {
-			for _, docid := range notInTable[i].docIds {
-				if indexer.findInNotInTable(notInTable, docid) {
-					uintDocIds = append(uintDocIds, docid)
-				}
-			}
-		}
-
-		// StableDesc(uintDocIds)
-
-		numDocs = 0
-		for _, doc := range uintDocIds {
-			indexedDoc := types.IndexedDoc{}
-			indexedDoc.DocId = doc
-			if !countDocsOnly {
-				docs = append(docs, indexedDoc)
-			}
-			numDocs++
-		}
-	}
-
 	return
 }
 
-func processLogicRes(mustTable []*KeywordIndices, shouldTable []*KeywordIndices, notInTable []*KeywordIndices) (docs []types.IndexedDoc, numDocs int) {
 
+func findLogicMust(mustTable []*KeywordIndices)  (docs []types.IndexedDoc, numDocs int) {
 	//处理mustTable
 	minlen:=-1
-	minindex:=-1
-	mustres:=[]string{}
+	minlenindex:=-1
+
 	for i,ks:=range mustTable{
 		if len(ks.docIds) < minlen {
 			minlen=len(ks.docIds)
-			minindex=i
+			minlenindex=i
+		}
+	}
+
+	m:=make(map[string]int,minlen)
+	for _,v:=range mustTable[minlenindex].docIds{
+		m[v]=1
+	}
+
+	for i,ks:=range mustTable{
+		if i != minlenindex {
+			//先去重复
+			ss:=removeDuplicate(ks.docIds)
+			for _,s:=range ss{
+				_,ok:=m[s]
+				if ok {
+					m[s]++
+				}
+			}
+
+		}
+	}
+
+	docs=make([]types.IndexedDoc,0,len(m))
+	for k,v:=range m{
+		if v == len(mustTable) {
+			docs=append(docs,types.IndexedDoc{
+				DocId:k,
+			})
+		}
+	}
+	return docs,len(docs)
+}
+
+
+func findLogicShould(shouldTable []*KeywordIndices)  (docs []types.IndexedDoc, numDocs int) {
+	shouldres:=make(map[string]int,len(shouldTable))
+	for _,ks:=range shouldTable{
+		for _,docID:=range ks.docIds{
+			shouldres[docID]++
+		}
+	}
+	numDocs=len(shouldres)
+	docs=make([]types.IndexedDoc,numDocs)
+
+	for k,_:=range shouldres{
+		docs=append(docs,types.IndexedDoc{
+			DocId:k,
+		})
+	}
+	return
+}
+
+func findLogicMustShould(mustTable []*KeywordIndices, shouldTable []*KeywordIndices)  (docs []types.IndexedDoc, numDocs int) {
+	//处理mustTable
+	minlen:=-1
+	minlenindex:=-1
+
+	for i,ks:=range mustTable{
+		if len(ks.docIds) < minlen {
+			minlen=len(ks.docIds)
+			minlenindex=i
+		}
+	}
+
+	m:=make(map[string]int,minlen)
+	for _,v:=range mustTable[minlenindex].docIds{
+		m[v]=1
+	}
+
+	for i,ks:=range mustTable{
+		if i != minlenindex {
+			//先去重复
+			ss:=removeDuplicate(ks.docIds)
+			for _,s:=range ss{
+				_,ok:=m[s]
+				if ok {
+					m[s]++
+				}
+			}
+
+		}
+	}
+
+	mustres:=make([]string,0,len(m))
+	for k,v:=range m{
+		if v == len(mustTable) {
+			mustres=append(mustres,k)
+		}
+	}
+
+	//处理shouldTable
+
+	shouldres:=make(map[string]int,len(shouldTable))
+	for _,ks:=range shouldTable{
+		for _,docID:=range ks.docIds{
+			shouldres[docID]++
+		}
+	}
+
+	//处理must 和should 联合过滤结果
+	docs=make([]types.IndexedDoc,0,len(mustres))
+	for _,s:=range mustres{
+		_,okshould:=shouldres[s]
+		if okshould {
+			docs=append(docs,types.IndexedDoc{
+				DocId:s,
+			})
+		}
+	}
+	return docs,len(docs)
+}
+
+func findLogicMustNot(mustTable []*KeywordIndices,  notInTable []*KeywordIndices) (docs []types.IndexedDoc, numDocs int) {
+	//处理mustTable
+	minlen:=-1
+	minlenindex:=-1
+
+	for i,ks:=range mustTable{
+		if len(ks.docIds) < minlen {
+			minlen=len(ks.docIds)
+			minlenindex=i
 		}
 	}
 
@@ -703,7 +953,98 @@ func processLogicRes(mustTable []*KeywordIndices, shouldTable []*KeywordIndices,
 	}
 
 	for i,ks:=range mustTable{
-		if i != minindex {
+		if i != minlenindex {
+			//先去重复
+			ss:=removeDuplicate(ks.docIds)
+			for _,s:=range ss{
+				_,ok:=m[s]
+				if ok {
+					m[s]++
+				}
+			}
+
+		}
+	}
+	mustres:=make([]string,0,len(m))
+	for k,v:=range m{
+		if v == len(mustTable) {
+			mustres=append(mustres,k)
+		}
+	}
+
+
+	//处理notInShould
+	notInres:=make(map[string]int,len(notInTable))
+	for _,ks:=range notInTable{
+		for _,docID:=range ks.docIds{
+			notInres[docID]++
+		}
+	}
+
+	//处理must 和notin的联合过滤结果
+	docs=make([]types.IndexedDoc,0,len(mustres))
+	for _,s:=range mustres{
+		_,oknotIn:=notInres[s]
+		if !oknotIn {
+			docs=append(docs,types.IndexedDoc{
+				DocId:s,
+			})
+		}
+	}
+	return docs,len(docs)
+
+}
+
+func findLogicShouldNot( shouldTable []*KeywordIndices, notInTable []*KeywordIndices) (docs []types.IndexedDoc, numDocs int) {
+	//处理Should
+	shouldres:=make(map[string]int,len(shouldTable))
+	for _,ks:=range shouldTable{
+		for _,docID:=range ks.docIds{
+			shouldres[docID]++
+		}
+	}
+
+	//处理notIn
+	notInres:=make(map[string]int,len(notInTable))
+	for _,ks:=range notInTable{
+		for _,docID:=range ks.docIds{
+			notInres[docID]++
+		}
+	}
+	//处理should 和notin的联合过滤结果
+	docs=make([]types.IndexedDoc,0,len(shouldres))
+	for	k,_:=range shouldres{
+		_,oknotIn:=notInres[k]
+		if !oknotIn {
+			docs=append(docs,types.IndexedDoc{
+				DocId:k,
+			})
+		}
+	}
+	return docs,len(docs)
+}
+
+
+func findLogicMustShouldNot(mustTable []*KeywordIndices, shouldTable []*KeywordIndices, notInTable []*KeywordIndices) (docs []types.IndexedDoc, numDocs int) {
+
+	//处理mustTable
+	minlen:=-1
+	minlenindex:=-1
+
+	for i,ks:=range mustTable{
+		if len(ks.docIds) < minlen {
+			minlen=len(ks.docIds)
+			minlenindex=i
+		}
+	}
+
+	m:=make(map[string]int,minlen)
+	for _,v:=range mustTable[minlen].docIds{
+		m[v]=1
+	}
+
+	for i,ks:=range mustTable{
+		if i != minlenindex {
 			//先去重复
 			ss:=removeDuplicate(ks.docIds)
 			for _,s:=range ss{
@@ -716,6 +1057,7 @@ func processLogicRes(mustTable []*KeywordIndices, shouldTable []*KeywordIndices,
 		}
 	}
 
+	mustres:=make([]string,0,len(m))
 	for k,v:=range m{
 		if v == len(mustTable) {
 			mustres=append(mustres,k)
@@ -724,7 +1066,7 @@ func processLogicRes(mustTable []*KeywordIndices, shouldTable []*KeywordIndices,
 
 	//处理shouldTable
 
-	shouldres:=make(map[string]int)
+	shouldres:=make(map[string]int,len(shouldTable))
 	for _,ks:=range shouldTable{
 		for _,docID:=range ks.docIds{
 			shouldres[docID]++
@@ -732,25 +1074,25 @@ func processLogicRes(mustTable []*KeywordIndices, shouldTable []*KeywordIndices,
 	}
 
 	//处理notInShould
-	notInres:=make(map[string]int)
+	notInres:=make(map[string]int,len(notInTable))
 	for _,ks:=range notInTable{
 		for _,docID:=range ks.docIds{
 			notInres[docID]++
 		}
 	}
 
-	//先处理must 和should 和notin的联合过滤结果
-	res:=[]types.IndexedDoc{}
+	//处理must 和should 和notin的联合过滤结果
+	docs=make([]types.IndexedDoc,0,len(mustres))
 	for _,s:=range mustres{
 		_,okshould:=shouldres[s]
 		_,oknotIn:=notInres[s]
 		if okshould&&!oknotIn {
-			res=append(res,types.IndexedDoc{
+			docs=append(docs,types.IndexedDoc{
 				DocId:s,
 			})
 		}
 	}
-	return res,len(res)
+	return docs,len(docs)
 }
 
 func removeDuplicate(input []string) []string {

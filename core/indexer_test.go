@@ -515,3 +515,4 @@ func TestLookupWithLocations(t *testing.T) {
 		[]string{"token2", "token3"}, []string{}, nil, false)
 	tt.Expect(t, "[[0 21] [28]]", docs[0].TokenLocs)
 }
+
